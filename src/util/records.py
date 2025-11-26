@@ -65,8 +65,11 @@ try:
 except NameError:
     basestring = unicode = str
 
+# JobRad custom view pattern for performance optimization
+_JOBRAD_CONTRACT_VIEW_PATTERN = 'report_contract_document_body_%'
 
-def remove_view(cr, xml_id=None, view_id=None, silent=False, key=None):
+
+def remove_view(cr, xml_id=None, view_id=None, silent=False, key=None, skip_jobrad_custom_contract_views=False):
     """
     Remove a view and all its descendants.
 
@@ -115,9 +118,9 @@ def remove_view(cr, xml_id=None, view_id=None, silent=False, key=None):
 
     # Occurrences of xml_id and key in the t-call of views are to be found and removed.
     if xml_id != "?":
-        _remove_redundant_tcalls(cr, xml_id)
+        _remove_redundant_tcalls(cr, xml_id, skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views)
     if key and key != xml_id:
-        _remove_redundant_tcalls(cr, key)
+        _remove_redundant_tcalls(cr, key, skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views)
 
     if not view_id:
         return
@@ -175,7 +178,7 @@ def remove_view(cr, xml_id=None, view_id=None, silent=False, key=None):
     if not silent:
         _logger.info("remove deprecated %s view %s (ID %s)", (key and "COWed") or "built-in", key or xml_id, view_id)
 
-    remove_records(cr, "ir.ui.view", [view_id])
+    remove_records(cr, "ir.ui.view", [view_id], skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views)
 
 
 @contextmanager
@@ -341,11 +344,12 @@ else:
 # fmt:on
 
 
-def remove_record(cr, name):
+def remove_record(cr, name, skip_jobrad_custom_contract_views=False):
     """
     Remove a record and its references corresponding to the given :term:`xml_id <external identifier>`.
 
     :param str name: record xml_id, under the format `module.name`
+    :param bool skip_jobrad_custom_contract_views: whether to skip check of JobRad custom ELV / UEV views
     """
     if isinstance(name, basestring):
         if "." not in name:
@@ -383,10 +387,10 @@ def remove_record(cr, name):
         _logger.log(NEARLYWARN, "Removing group %r", name)
         return remove_group(cr, group_id=res_id)
 
-    return remove_records(cr, model, [res_id])
+    return remove_records(cr, model, [res_id], skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views)
 
 
-def remove_records(cr, model, ids):
+def remove_records(cr, model, ids, skip_jobrad_custom_contract_views=False):
     if not ids:
         return
 
@@ -403,7 +407,10 @@ def remove_records(cr, model, ids):
             for (view_id,) in cr.fetchall():
                 remove_view(cr, view_id=view_id)
         else:
-            remove_records(cr, theme_copy_model, [rid for (rid,) in cr.fetchall()])
+            remove_records(
+                cr, theme_copy_model, [rid for (rid,) in cr.fetchall()],
+                skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views
+            )
 
     for inh in for_each_inherit(cr, model, skip=()):
         if inh.via:
@@ -418,7 +425,10 @@ def remove_records(cr, model, ids):
                 for (view_id,) in cr.fetchall():
                     remove_view(cr, view_id=view_id)
             else:
-                remove_records(cr, inh.model, [rid for (rid,) in cr.fetchall()])
+                remove_records(
+                    cr, inh.model, [rid for (rid,) in cr.fetchall()],
+                    skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views
+                )
 
     table = table_of_model(cr, model)
     base_query = format_query(cr, "DELETE FROM {} WHERE id IN %s", table)
@@ -460,7 +470,7 @@ def remove_records(cr, model, ids):
                 [ids],
             ).decode()
             explode_execute(cr, query, table=ir.table)
-    _rm_refs(cr, model, ids)
+    _rm_refs(cr, model, ids, skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views)
 
     if model == "res.groups":
         # A group is gone, the auto-generated view `base.user_groups_view` is outdated.
@@ -475,7 +485,7 @@ def remove_records(cr, model, ids):
         )
 
 
-def _rm_refs(cr, model, ids=None):
+def _rm_refs(cr, model, ids=None, skip_jobrad_custom_contract_views=False):
     if ids is None:
         match = "like %s"
         needle = model + ",%"
@@ -503,7 +513,9 @@ def _rm_refs(cr, model, ids=None):
             if ref_model == "ir.ui.view":
                 cr.execute("SELECT id" + query_tail, [needle])
                 for (view_id,) in cr.fetchall():
-                    remove_view(cr, view_id=view_id, silent=True)
+                    remove_view(
+                        cr, view_id=view_id, silent=True, skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views
+                    )
             elif ref_model == "ir.ui.menu":
                 cr.execute("SELECT id" + query_tail, [needle])
                 menu_ids = tuple(m[0] for m in cr.fetchall())
@@ -511,7 +523,9 @@ def _rm_refs(cr, model, ids=None):
             else:
                 cr.execute("SELECT id" + query_tail, [needle])
                 for (record_id,) in cr.fetchall():
-                    remove_record(cr, (ref_model, record_id))
+                    remove_record(
+                        cr, (ref_model, record_id), skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views
+                    )
 
     if table_exists(cr, "ir_values"):
         column, _ = _ir_values_value(cr)
@@ -1920,36 +1934,58 @@ def remove_act_window_view_mode(cr, model, view_mode):
     )
 
 
-def _remove_redundant_tcalls(cr, match):
+def _remove_redundant_tcalls(cr, match, skip_jobrad_custom_contract_views=False):
     """
     Remove t-calls of the removed view.
 
     This function removes the t-calls to `match`.
 
     :param str match: t-calls value to remove, typically it would be a view's xml_id or key
+    :param bool skip_jobrad_custom_contract_views: whether to skip JobRad custom ELV / UEV views
+                                                  when removing t-calls
     """
     arch_col = (
         get_value_or_en_translation(cr, "ir_ui_view", "arch_db")
         if column_exists(cr, "ir_ui_view", "arch_db")
         else "arch"
     )
-    cr.execute(
-        format_query(
-            cr,
-            """
-            SELECT iv.id,
-                   imd.module,
-                   imd.name
-              FROM ir_ui_view iv
-         LEFT JOIN ir_model_data imd
-                ON iv.id = imd.res_id
-               AND imd.model = 'ir.ui.view'
-             WHERE {} ~ %s
-        """,
-            sql.SQL(arch_col),
-        ),
-        [r"""\yt-call=(["']){}\1""".format(re.escape(match))],
-    )
+    if skip_jobrad_custom_contract_views:
+        _logger.warning(f"Skipping jobrad custom contract views for removing t-calls to {match}")
+        cr.execute(
+            format_query(
+                cr,
+                """
+                SELECT iv.id,
+                       imd.module,
+                       imd.name
+                  FROM ir_ui_view iv
+             LEFT JOIN ir_model_data imd
+                    ON iv.id = imd.res_id
+                   AND imd.model = 'ir.ui.view'
+                 WHERE iv.name NOT LIKE %s AND {} ~ %s
+            """,
+                sql.SQL(arch_col),
+            ),
+            [_JOBRAD_CONTRACT_VIEW_PATTERN, r"""\yt-call=(["']){}\1""".format(re.escape(match))],
+        )
+    else:
+        cr.execute(
+            format_query(
+                cr,
+                """
+                SELECT iv.id,
+                       imd.module,
+                       imd.name
+                  FROM ir_ui_view iv
+             LEFT JOIN ir_model_data imd
+                    ON iv.id = imd.res_id
+                   AND imd.model = 'ir.ui.view'
+                 WHERE {} ~ %s
+            """,
+                sql.SQL(arch_col),
+            ),
+            [r"""\yt-call=(["']){}\1""".format(re.escape(match))],
+        )
     standard_modules = set(modules.get_modules()) - {"studio_customization"}
     for vid, module, name in cr.fetchall():
         with edit_view(cr, view_id=vid) as arch:

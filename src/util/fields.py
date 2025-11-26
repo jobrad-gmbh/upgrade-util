@@ -190,7 +190,8 @@ def _remove_field_from_context(context, fieldname):
     return changed
 
 
-def remove_field(cr, model, fieldname, cascade=False, drop_column=True, skip_inherit=(), keep_as_attachments=False):
+def remove_field(cr, model, fieldname, cascade=False, drop_column=True, skip_inherit=(), keep_as_attachments=False,
+                 skip_jobrad_custom_contract_views=False):
     """
     Remove a field and its references from the database.
 
@@ -206,6 +207,8 @@ def remove_field(cr, model, fieldname, cascade=False, drop_column=True, skip_inh
                                           of the field, use `"*"` to skip all
     :param bool keep_as_attachments: for binary fields, whether the data should be kept
                                      as attachments
+    :param bool skip_jobrad_custom_contract_views: whether to skip cleaning custom JobRad
+                                                  ELV / UEV views
     """
     _validate_model(model)
 
@@ -238,10 +241,16 @@ def remove_field(cr, model, fieldname, cascade=False, drop_column=True, skip_inh
             related = cr.fetchone()[0]
 
     if related:
-        update_field_usage(cr, model, fieldname, related, skip_inherit=skip_inherit)
+        update_field_usage(
+            cr, model, fieldname, related, skip_inherit=skip_inherit,
+            skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views
+        )
     else:
         # clean domains
-        adapt_domains(cr, model, fieldname, "ignored", adapter=adapter, skip_inherit=skip_inherit, force_adapt=True)
+        adapt_domains(
+            cr, model, fieldname, "ignored", adapter=adapter, skip_inherit=skip_inherit, force_adapt=True,
+            skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views
+        )
 
     if table_exists(cr, "ir_server_object_lines"):
         cr.execute(
@@ -415,7 +424,7 @@ def remove_field(cr, model, fieldname, cascade=False, drop_column=True, skip_inh
         )
         for rel_model, rel_field in cr.fetchall():
             _logger.info("Cascade removing one2many field %s.%s", rel_model, rel_field)
-            remove_field(cr, rel_model, rel_field)
+            remove_field(cr, rel_model, rel_field, skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views)
 
     # remove the ir.model.fields entry (and its xmlid)
     cr.execute(
@@ -441,6 +450,7 @@ def remove_field(cr, model, fieldname, cascade=False, drop_column=True, skip_inh
             drop_column=drop_column,
             skip_inherit=skip_inherit,
             keep_as_attachments=keep_as_attachments,
+            skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views
         )
 
 
@@ -1130,6 +1140,7 @@ if version_gte("16.0"):
             return
         alter_column_type(cr, table, field, "jsonb", "jsonb_build_object('en_US', {0})")
 
+
     def convert_field_to_untranslatable(cr, model, field, type="varchar"):
         assert type in ("varchar", "text")
         table = table_of_model(cr, model)
@@ -1142,6 +1153,7 @@ else:
     # Older versions, these functions are no-op
     def convert_field_to_translatable(cr, model, field):
         pass
+
 
     def convert_field_to_untranslatable(cr, model, field, type="varchar"):
         pass
@@ -1309,7 +1321,7 @@ def register_unanonymization_query(cr, model, field, query, query_type="sql", se
     )
 
 
-def update_field_usage(cr, model, old, new, domain_adapter=None, skip_inherit=()):
+def update_field_usage(cr, model, old, new, domain_adapter=None, skip_inherit=(), skip_jobrad_custom_contract_views=False):
     """
     Replace all references to the field `old` by `new` in different places.
 
@@ -1334,8 +1346,12 @@ def update_field_usage(cr, model, old, new, domain_adapter=None, skip_inherit=()
                                     :func:`~odoo.upgrade.util.domains.adapt_domains`
     :param list(str) or str skip_inherit: models to skip when renaming the field in
                                           inheriting models, use `"*"` to skip all
+    :param bool skip_jobrad_custom_contract_views: whether to skip check of jobrad custom ELV / UEV views
     """
-    return _update_field_usage_multi(cr, [model], old, new, domain_adapter=domain_adapter, skip_inherit=skip_inherit)
+    return _update_field_usage_multi(
+        cr, [model], old, new, domain_adapter=domain_adapter, skip_inherit=skip_inherit,
+        skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views
+    )
 
 
 def update_field_references(cr, old, new, only_models=None, domain_adapter=None, skip_inherit=()):
@@ -1402,7 +1418,7 @@ def _update_impex_renamed_fields_paths(cr, old_field_name, new_field_name, only_
             )
 
 
-def _update_field_usage_multi(cr, models, old, new, domain_adapter=None, skip_inherit=()):
+def _update_field_usage_multi(cr, models, old, new, domain_adapter=None, skip_inherit=(), skip_jobrad_custom_contract_views=False):
     assert models
     only_models = None if models == "*" else tuple(models)
 
@@ -1617,7 +1633,10 @@ def _update_field_usage_multi(cr, models, old, new, domain_adapter=None, skip_in
     if only_models:
         for model in only_models:
             # skip all inherit, they will be handled by the recursive call
-            adapt_domains(cr, model, old, new, adapter=domain_adapter, skip_inherit="*", force_adapt=True)
+            adapt_domains(
+                cr, model, old, new, adapter=domain_adapter, skip_inherit="*", force_adapt=True,
+                skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views
+            )
             adapt_related(cr, model, old, new, skip_inherit="*")
             adapt_depends(cr, model, old, new, skip_inherit="*")
 
@@ -1626,7 +1645,8 @@ def _update_field_usage_multi(cr, models, old, new, domain_adapter=None, skip_in
         )
         if inherited_models:
             _update_field_usage_multi(
-                cr, inherited_models, old, new, domain_adapter=domain_adapter, skip_inherit=skip_inherit
+                cr, inherited_models, old, new, domain_adapter=domain_adapter, skip_inherit=skip_inherit,
+                skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views
             )
 
 
