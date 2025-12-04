@@ -71,7 +71,7 @@ from .pg import (
     table_exists,
     target_of,
 )
-from .records import _remove_import_export_paths
+from .records import _SKIP_JOBRAD_VIEWS_DEFAULT, _remove_import_export_paths
 from .report import add_to_migration_reports, get_anchor_link_to_record
 
 # python3 shims
@@ -191,7 +191,7 @@ def _remove_field_from_context(context, fieldname):
 
 
 def remove_field(cr, model, fieldname, cascade=False, drop_column=True, skip_inherit=(), keep_as_attachments=False,
-                 skip_jobrad_custom_contract_views=False):
+                 skip_jobrad_custom_contract_views=_SKIP_JOBRAD_VIEWS_DEFAULT):
     """
     Remove a field and its references from the database.
 
@@ -1321,7 +1321,7 @@ def register_unanonymization_query(cr, model, field, query, query_type="sql", se
     )
 
 
-def update_field_usage(cr, model, old, new, domain_adapter=None, skip_inherit=(), skip_jobrad_custom_contract_views=False):
+def update_field_usage(cr, model, old, new, domain_adapter=None, skip_inherit=(), skip_jobrad_custom_contract_views=_SKIP_JOBRAD_VIEWS_DEFAULT):
     """
     Replace all references to the field `old` by `new` in different places.
 
@@ -1418,7 +1418,7 @@ def _update_impex_renamed_fields_paths(cr, old_field_name, new_field_name, only_
             )
 
 
-def _update_field_usage_multi(cr, models, old, new, domain_adapter=None, skip_inherit=(), skip_jobrad_custom_contract_views=False):
+def _update_field_usage_multi(cr, models, old, new, domain_adapter=None, skip_inherit=(), skip_jobrad_custom_contract_views=_SKIP_JOBRAD_VIEWS_DEFAULT):
     assert models
     only_models = None if models == "*" else tuple(models)
 

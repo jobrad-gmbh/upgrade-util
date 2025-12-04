@@ -65,11 +65,15 @@ try:
 except NameError:
     basestring = unicode = str
 
-# JobRad custom view pattern for performance optimization
+# JobRad custom view pattern
 _JOBRAD_CONTRACT_VIEW_PATTERN = 'report_contract_document_body_%'
 
+# Default value for skip_jobrad_custom_contract_views, configurable via env var
+# Default is False, set UPGRADE_SKIP_JOBRAD_VIEWS=1 to enable skipping
+_SKIP_JOBRAD_VIEWS_DEFAULT = os.getenv('UPGRADE_SKIP_JOBRAD_VIEWS', '0').lower() in ('1', 'true', 'yes', 'on')
 
-def remove_view(cr, xml_id=None, view_id=None, silent=False, key=None, skip_jobrad_custom_contract_views=False):
+
+def remove_view(cr, xml_id=None, view_id=None, silent=False, key=None, skip_jobrad_custom_contract_views=_SKIP_JOBRAD_VIEWS_DEFAULT):
     """
     Remove a view and all its descendants.
 
@@ -344,7 +348,7 @@ else:
 # fmt:on
 
 
-def remove_record(cr, name, skip_jobrad_custom_contract_views=False):
+def remove_record(cr, name, skip_jobrad_custom_contract_views=_SKIP_JOBRAD_VIEWS_DEFAULT):
     """
     Remove a record and its references corresponding to the given :term:`xml_id <external identifier>`.
 
@@ -390,7 +394,7 @@ def remove_record(cr, name, skip_jobrad_custom_contract_views=False):
     return remove_records(cr, model, [res_id], skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views)
 
 
-def remove_records(cr, model, ids, skip_jobrad_custom_contract_views=False):
+def remove_records(cr, model, ids, skip_jobrad_custom_contract_views=_SKIP_JOBRAD_VIEWS_DEFAULT):
     if not ids:
         return
 
@@ -485,7 +489,7 @@ def remove_records(cr, model, ids, skip_jobrad_custom_contract_views=False):
         )
 
 
-def _rm_refs(cr, model, ids=None, skip_jobrad_custom_contract_views=False):
+def _rm_refs(cr, model, ids=None, skip_jobrad_custom_contract_views=_SKIP_JOBRAD_VIEWS_DEFAULT):
     if ids is None:
         match = "like %s"
         needle = model + ",%"
@@ -1934,7 +1938,7 @@ def remove_act_window_view_mode(cr, model, view_mode):
     )
 
 
-def _remove_redundant_tcalls(cr, match, skip_jobrad_custom_contract_views=False):
+def _remove_redundant_tcalls(cr, match, skip_jobrad_custom_contract_views=_SKIP_JOBRAD_VIEWS_DEFAULT):
     """
     Remove t-calls of the removed view.
 

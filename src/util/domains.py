@@ -36,7 +36,7 @@ from .helpers import _dashboard_actions, _validate_model, resolve_model_fields_p
 from .inherit import for_each_inherit
 from .misc import SelfPrintEvalContext, ast_unparse, literal_replace, safe_eval, version_gte
 from .pg import column_exists, get_value_or_en_translation, table_exists
-from .records import _JOBRAD_CONTRACT_VIEW_PATTERN, edit_view
+from .records import _JOBRAD_CONTRACT_VIEW_PATTERN, _SKIP_JOBRAD_VIEWS_DEFAULT, edit_view
 
 # python3 shims
 try:
@@ -400,7 +400,7 @@ if ast_unparse is None:
     _adapt_one_domain = _adapt_one_domain_old
 
 
-def adapt_domains(cr, model, old, new, adapter=None, skip_inherit=(), force_adapt=False, skip_jobrad_custom_contract_views=False):
+def adapt_domains(cr, model, old, new, adapter=None, skip_inherit=(), force_adapt=False, skip_jobrad_custom_contract_views=_SKIP_JOBRAD_VIEWS_DEFAULT):
     """
     Replace `old` by `new` in domains using `model` and inheriting models.
 

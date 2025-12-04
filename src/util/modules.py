@@ -52,7 +52,7 @@ from .misc import on_CI, parse_version, str2bool, version_gte
 from .models import delete_model
 from .orm import env, flush
 from .pg import SQLStr, column_exists, format_query, table_exists, target_of
-from .records import ref, remove_group, remove_menus, remove_records, remove_view, replace_record_references_batch
+from .records import _SKIP_JOBRAD_VIEWS_DEFAULT, ref, remove_group, remove_menus, remove_records, remove_view, replace_record_references_batch
 
 INSTALLED_MODULE_STATES = ("installed", "to install", "to upgrade")
 _logger = logging.getLogger(__name__)
@@ -149,7 +149,7 @@ def module_installed(cr, module):
 
 
 @_warn_usage_outside_base
-def uninstall_module(cr, module, skip_jobrad_custom_contract_views=False):
+def uninstall_module(cr, module, skip_jobrad_custom_contract_views=_SKIP_JOBRAD_VIEWS_DEFAULT):
     """
     Uninstall and remove all records owned by a module.
 
@@ -317,7 +317,7 @@ def uninstall_theme(cr, theme, base_theme=None):
 
 
 @_warn_usage_outside_base
-def remove_module(cr, module, skip_jobrad_custom_contract_views=False):
+def remove_module(cr, module, skip_jobrad_custom_contract_views=_SKIP_JOBRAD_VIEWS_DEFAULT):
     """
     Completely remove a module.
 
