@@ -36,7 +36,7 @@ from .helpers import _dashboard_actions, _validate_model, resolve_model_fields_p
 from .inherit import for_each_inherit
 from .misc import SelfPrintEvalContext, ast_unparse, literal_replace, safe_eval, version_gte
 from .pg import SQLStr, column_exists, format_query, get_value_or_en_translation, table_exists
-from .records import edit_view
+from .records import _JOBRAD_CONTRACT_VIEW_PATTERN, edit_view
 
 # python3 shims
 try:
@@ -400,7 +400,9 @@ if ast_unparse is None:
     _adapt_one_domain = _adapt_one_domain_old
 
 
-def adapt_domains(cr, model, old, new, adapter=None, skip_inherit=(), force_adapt=False):
+def adapt_domains(
+    cr, model, old, new, adapter=None, skip_inherit=(), force_adapt=False, skip_jobrad_custom_contract_views=False
+):
     """
     Replace `old` by `new` in domains using `model` and inheriting models.
 
@@ -494,7 +496,14 @@ def adapt_domains(cr, model, old, new, adapter=None, skip_inherit=(), force_adap
         else "arch"
     )
     active_col = "active" if column_exists(cr, "ir_ui_view", "active") else "true"
-    cr.execute("SELECT id, model, {} FROM ir_ui_view WHERE {} ~ %s".format(active_col, arch_db), [match_old])
+    if skip_jobrad_custom_contract_views:
+        cr.execute(
+            "SELECT id, model, {} FROM ir_ui_view WHERE name NOT LIKE %s AND {} ~ %s".format(active_col, arch_db),
+            [_JOBRAD_CONTRACT_VIEW_PATTERN, match_old],
+        )
+        _logger.warning(f"Skipping check on jobrad custom ELV / UEV views for {model} field change {old} -> {new}")
+    else:
+        cr.execute("SELECT id, model, {} FROM ir_ui_view WHERE {} ~ %s".format(active_col, arch_db), [match_old])
     for view_id, view_model, view_active in cr.fetchall():
         # Note: active=None is important to not reactivate views!
         try:
@@ -574,4 +583,13 @@ def adapt_domains(cr, model, old, new, adapter=None, skip_inherit=(), force_adap
 
     # down on inherits
     for inh in for_each_inherit(cr, target_model, skip_inherit):
-        adapt_domains(cr, inh.model, old, new, adapter, skip_inherit=skip_inherit, force_adapt=force_adapt)
+        adapt_domains(
+            cr,
+            inh.model,
+            old,
+            new,
+            adapter,
+            skip_inherit=skip_inherit,
+            force_adapt=force_adapt,
+            skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views,
+        )

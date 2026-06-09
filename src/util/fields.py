@@ -206,6 +206,7 @@ def remove_field(
     skip_inherit=(),
     keep_as_attachments=False,
     update_references=True,
+    skip_jobrad_custom_contract_views=False,
 ):
     """
     Remove a field and its references from the database.
@@ -252,11 +253,25 @@ def remove_field(
                 related = cr.fetchone()[0]
 
         if related:
-            update_field_usage(cr, model, fieldname, related, skip_inherit=skip_inherit)
+            update_field_usage(
+                cr,
+                model,
+                fieldname,
+                related,
+                skip_inherit=skip_inherit,
+                skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views,
+            )
         else:
             # clean domains
             adapt_domains(
-                cr, model, fieldname, "ignored", adapter=_rm_field_adapter, skip_inherit=skip_inherit, force_adapt=True
+                cr,
+                model,
+                fieldname,
+                "ignored",
+                adapter=_rm_field_adapter,
+                skip_inherit=skip_inherit,
+                force_adapt=True,
+                skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views,
             )
 
     if table_exists(cr, "ir_server_object_lines"):
@@ -431,7 +446,7 @@ def remove_field(
         )
         for rel_model, rel_field in cr.fetchall():
             _logger.info("Cascade removing one2many field %s.%s", rel_model, rel_field)
-            remove_field(cr, rel_model, rel_field)
+            remove_field(cr, rel_model, rel_field, skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views)
 
     # remove the ir.model.fields entry (and its xmlid)
     cr.execute(
@@ -458,6 +473,7 @@ def remove_field(
             skip_inherit=skip_inherit,
             keep_as_attachments=keep_as_attachments,
             update_references=update_references,
+            skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views,
         )
 
 
@@ -1351,7 +1367,9 @@ def register_unanonymization_query(cr, model, field, query, query_type="sql", se
     )
 
 
-def update_field_usage(cr, model, old, new, domain_adapter=None, skip_inherit=()):
+def update_field_usage(
+    cr, model, old, new, domain_adapter=None, skip_inherit=(), skip_jobrad_custom_contract_views=False
+):
     """
     Replace all references to the field `old` by `new` in different places.
 
@@ -1379,7 +1397,15 @@ def update_field_usage(cr, model, old, new, domain_adapter=None, skip_inherit=()
     :param list(str) or str skip_inherit: models to skip when renaming the field in
                                           inheriting models, use `"*"` to skip all
     """
-    return _update_field_usage_multi(cr, [model], old, new, domain_adapter=domain_adapter, skip_inherit=skip_inherit)
+    return _update_field_usage_multi(
+        cr,
+        [model],
+        old,
+        new,
+        domain_adapter=domain_adapter,
+        skip_inherit=skip_inherit,
+        skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views,
+    )
 
 
 def update_field_references(cr, old, new, only_models=None, domain_adapter=None, skip_inherit=()):
@@ -1446,7 +1472,9 @@ def _update_impex_renamed_fields_paths(cr, old_field_name, new_field_name, only_
             )
 
 
-def _update_field_usage_multi(cr, models, old, new, domain_adapter=None, skip_inherit=()):
+def _update_field_usage_multi(
+    cr, models, old, new, domain_adapter=None, skip_inherit=(), skip_jobrad_custom_contract_views=False
+):
     assert models
     only_models = None if models == "*" else tuple(models)
 
@@ -1744,7 +1772,16 @@ def _update_field_usage_multi(cr, models, old, new, domain_adapter=None, skip_in
     if only_models:
         for model in only_models:
             # skip all inherit, they will be handled by the recursive call
-            adapt_domains(cr, model, old, new, adapter=domain_adapter, skip_inherit="*", force_adapt=True)
+            adapt_domains(
+                cr,
+                model,
+                old,
+                new,
+                adapter=domain_adapter,
+                skip_inherit="*",
+                force_adapt=True,
+                skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views,
+            )
             adapt_related(cr, model, old, new, skip_inherit="*")
             adapt_depends(cr, model, old, new, skip_inherit="*")
 
@@ -1753,7 +1790,13 @@ def _update_field_usage_multi(cr, models, old, new, domain_adapter=None, skip_in
         )
         if inherited_models:
             _update_field_usage_multi(
-                cr, inherited_models, old, new, domain_adapter=domain_adapter, skip_inherit=skip_inherit
+                cr,
+                inherited_models,
+                old,
+                new,
+                domain_adapter=domain_adapter,
+                skip_inherit=skip_inherit,
+                skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views,
             )
 
 

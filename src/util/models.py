@@ -61,7 +61,7 @@ def _unknown_model_id(cr):
     return cr.fetchone()[0]
 
 
-def remove_model(cr, model, drop_table=True, ignore_m2m=()):
+def remove_model(cr, model, drop_table=True, ignore_m2m=(), skip_jobrad_custom_contract_views=False):
     """
     Remove a model and its references from the database.
 
@@ -134,14 +134,23 @@ def remove_model(cr, model, drop_table=True, ignore_m2m=()):
         with query_ids(cr, query, itersize=chunk_size) as ids_:
             if ir.table == "ir_ui_view":
                 for view_id in ids_:
-                    remove_view(cr, view_id=view_id, silent=True)
+                    remove_view(
+                        cr,
+                        view_id=view_id,
+                        silent=True,
+                        skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views,
+                    )
             else:
                 # remove in batch
                 size = (len(ids_) + chunk_size - 1) / chunk_size
                 it = chunks(ids_, chunk_size, fmt=tuple)
                 for sub_ids in log_progress(it, _logger, qualifier=ir.table, size=size):
-                    remove_records(cr, ref_model, sub_ids)
-                    _rm_refs(cr, ref_model, sub_ids)
+                    remove_records(
+                        cr, ref_model, sub_ids, skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views
+                    )
+                    _rm_refs(
+                        cr, ref_model, sub_ids, skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views
+                    )
 
         if ir.set_unknown:
             # Link remaining records not linked to a XMLID
@@ -166,7 +175,7 @@ def remove_model(cr, model, drop_table=True, ignore_m2m=()):
 
     _remove_import_export_paths(cr, model)
 
-    _rm_refs(cr, model)
+    _rm_refs(cr, model, skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views)
 
     cr.execute(
         "SELECT id, {} FROM ir_model WHERE model=%s".format(get_value_or_en_translation(cr, "ir_model", "name")),

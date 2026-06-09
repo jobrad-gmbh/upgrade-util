@@ -150,7 +150,7 @@ def module_installed(cr, module):
 
 
 @_warn_usage_outside_base
-def uninstall_module(cr, module):
+def uninstall_module(cr, module, skip_jobrad_custom_contract_views=False):
     """
     Uninstall and remove all records owned by a module.
 
@@ -233,12 +233,16 @@ def uninstall_module(cr, module):
     for model, group in itertools.groupby(to_group, lambda it: it[0]):
         if model == "ir.ui.view":
             for _, res_id in group:
-                remove_view(cr, view_id=res_id, silent=True)
+                remove_view(
+                    cr, view_id=res_id, silent=True, skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views
+                )
         elif model == "res.groups":
             for _, res_id in group:
                 remove_group(cr, group_id=res_id)
         else:
-            remove_records(cr, model, [it[1] for it in group])
+            remove_records(
+                cr, model, [it[1] for it in group], skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views
+            )
 
     if menu_ids:
         remove_menus(cr, menu_ids)
@@ -271,7 +275,7 @@ def uninstall_module(cr, module):
             if name == "id":
                 delete_model(cr, model)
             else:
-                remove_field(cr, model, name)
+                remove_field(cr, model, name, skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views)
 
     cr.execute("DELETE FROM ir_model_data WHERE module=%s", (module,))
     if table_exists(cr, "ir_translation"):
@@ -317,7 +321,7 @@ def uninstall_theme(cr, theme, base_theme=None):
 
 
 @_warn_usage_outside_base
-def remove_module(cr, module):
+def remove_module(cr, module, skip_jobrad_custom_contract_views=False):
     """
     Completely remove a module.
 
@@ -334,7 +338,7 @@ def remove_module(cr, module):
     # module need to be currently installed and running as deletions
     # are made using orm.
 
-    uninstall_module(cr, module)
+    uninstall_module(cr, module, skip_jobrad_custom_contract_views=skip_jobrad_custom_contract_views)
     cr.execute("DELETE FROM ir_module_module_dependency WHERE name=%s", (module,))
     cr.execute("DELETE FROM ir_module_module WHERE name=%s RETURNING id", (module,))
     if cr.rowcount:
