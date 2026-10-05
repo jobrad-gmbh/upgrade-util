@@ -1,5 +1,12 @@
 # 🧰 Upgrade Utils
 
+> [!IMPORTANT]
+> To skip JobRad's views, please use `UPGRADE_SKIP_JOBRAD_VIEWS=1` environment variable or set the flag programmatically:
+> ```python
+> from odoo.upgrade import util
+> util.jobrad.skip_views = True
+> ```
+
 This repository contains helper functions[^1] to facilitate the writing of upgrade scripts.
 
 The functions in this repo are meant to work (sometimes just not fail) from Odoo 7.0 up to latest version.
