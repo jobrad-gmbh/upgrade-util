@@ -44,6 +44,7 @@ from .pg import (
     table_exists,
 )
 from .records import edit_view
+from . import jobrad
 
 # python3 shims
 try:
@@ -505,7 +506,13 @@ def adapt_domains(cr, model, old, new, adapter=None, skip_inherit=(), force_adap
         else "arch"
     )
     active_col = "active" if column_exists(cr, "ir_ui_view", "active") else "true"
-    cr.execute("SELECT id, model, {} FROM ir_ui_view WHERE {} ~ %s".format(active_col, arch_db), [match_old])
+
+    if jobrad.skip_views:
+        _logger.warning(f"[JobRad] Skipping check on custom ELV / UEV views for {target_model} field change {old} -> {new}")
+        cr.execute("SELECT id, model, {} FROM ir_ui_view WHERE name NOT LIKE %s AND {} ~ %s".format(active_col, arch_db), [jobrad.CONTRACT_VIEW_PATTERN, match_old])
+    else:
+        cr.execute("SELECT id, model, {} FROM ir_ui_view WHERE {} ~ %s".format(active_col, arch_db), [match_old])
+
     for view_id, view_model, view_active in cr.fetchall():
         # Note: active=None is important to not reactivate views!
         try:

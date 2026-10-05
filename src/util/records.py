@@ -57,6 +57,7 @@ from .pg import (
     target_of,
 )
 from .report import add_to_migration_reports
+from . import jobrad
 
 # python3 shims
 try:
@@ -329,23 +330,45 @@ def _remove_views(cr, xml_ids=None, view_ids=None, logger=_logger):
         else "arch"
     )
     pattern = r"""\yt-call=(["'])({})\1""".format("|".join(re.escape(m) for m in matches))
-    cr.execute(
-        format_query(
-            cr,
-            """
-            SELECT iv.id,
-                   imd.module,
-                   imd.name
-              FROM ir_ui_view iv
-         LEFT JOIN ir_model_data imd
-                ON iv.id = imd.res_id
-               AND imd.model = 'ir.ui.view'
-             WHERE {} ~ %s
-        """,
-            sql.SQL(arch_col),
-        ),
-        [pattern],
-    )
+
+    if jobrad.skip_views:
+        _logger.warning(f"[JobRad] Skipping custom contract views for removing t-calls (pattern: {pattern})")
+        cr.execute(
+            format_query(
+                cr,
+                """
+                SELECT iv.id,
+                       imd.module,
+                       imd.name
+                  FROM ir_ui_view iv
+             LEFT JOIN ir_model_data imd
+                    ON iv.id = imd.res_id
+                   AND imd.model = 'ir.ui.view'
+                 WHERE iv.name NOT LIKE %s AND {} ~ %s
+            """,
+                sql.SQL(arch_col),
+            ),
+            [jobrad.CONTRACT_VIEW_PATTERN, pattern],
+        )
+    else:
+        cr.execute(
+            format_query(
+                cr,
+                """
+                SELECT iv.id,
+                       imd.module,
+                       imd.name
+                  FROM ir_ui_view iv
+             LEFT JOIN ir_model_data imd
+                    ON iv.id = imd.res_id
+                   AND imd.model = 'ir.ui.view'
+                 WHERE {} ~ %s
+            """,
+                sql.SQL(arch_col),
+            ),
+            [pattern],
+        )
+
     standard_modules = set(get_modules()) - {"studio_customization"}
     for vid, module, name in cr.fetchall():
         removed = []
